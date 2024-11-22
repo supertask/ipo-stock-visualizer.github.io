@@ -117,7 +117,8 @@
 
         // 条件を変更してグラフを再描画
         currentCondition = this.getAttribute('data-condition');
-        renderChart(currentCondition, currentColumn);
+        console.log(`条件変更: 最大何倍株 >= ${currentCondition}`); // デバッグ用
+        renderChart(currentCondition, currentColumn); // グラフを再描画
       });
     });
 
