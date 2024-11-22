@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>最大何倍株の分布可視化</title>
+  <title>分布可視化</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.0/papaparse.min.js"></script>
   <style>
@@ -45,89 +45,94 @@
 </head>
 
 <body>
-  <h1 style="text-align:center;">最大何倍株の分布可視化</h1>
-  <div class="tabs">
-    <div class="tab active" data-multiple="3">3倍株</div>
-    <div class="tab" data-multiple="5">5倍株</div>
-    <div class="tab" data-multiple="7">7倍株</div>
-    <div class="tab" data-multiple="10">10倍株以上</div>
+  <h1 style="text-align:center;">分布可視化</h1>
+
+  <!-- 最大何倍株の条件タブ -->
+  <div class="tabs" id="condition-tabs">
+    <div class="tab active" data-condition="3">最大何倍株 >= 3</div>
+    <div class="tab" data-condition="5">最大何倍株 >= 5</div>
+    <div class="tab" data-condition="7">最大何倍株 >= 7</div>
+    <div class="tab" data-condition="10">最大何倍株 >= 10</div>
   </div>
+
+  <!-- データ列のタブ -->
+  <div class="tabs" id="column-tabs">
+    <div class="tab active" data-column="オーナー株%">オーナー株%</div>
+    <div class="tab" data-column="売上成長率_平均">売上成長率_平均</div>
+    <div class="tab" data-column="経常利益率_平均">経常利益率_平均</div>
+    <div class="tab" data-column="想定時価総額">想定時価総額</div>
+    <div class="tab" data-column="売買回転率">売買回転率</div>
+  </div>
+
   <div class="chart-container">
     <div id="chart"></div>
   </div>
 
   <script>
-    // データ読み込み
-    let rawData = [];
-    Papa.parse("static/tsv/companies_for_pie_chart.tsv", {
-      download: true,
-      header: true,
-      delimiter: "\t",
-      complete: function (results) {
-        rawData = results.data;
-        
-        // 読み込まれたデータを確認
-        console.log("TSVファイルのデータ:", rawData);
+    let currentCondition = "3"; // 初期の最大何倍株条件
+    let currentColumn = "オーナー株%"; // 初期の列
 
-        // 最初の行を確認
-        console.log("最初の行:", rawData[0]);
+    // グラフ描画関数
+    function renderChart(condition, column) {
+      const filePath = `static/tsv/max_n_bagger_${condition}/${column}_distribution.tsv`;
 
-        renderChart(3); // 初期表示は「3倍株」
-      }
-    });
+      Papa.parse(filePath, {
+        download: true,
+        header: true,
+        delimiter: "\t",
+        complete: function (results) {
+          const data = results.data;
 
-    // タブのクリックイベント
-    document.querySelectorAll('.tab').forEach(tab => {
+          // データの整形
+          const labels = data.map(row => row[`${column}_区間`]);
+          const values = data.map(row => parseInt(row['件数'], 10));
+
+          // 円グラフデータ
+          const chartData = [{
+            labels: labels,
+            values: values,
+            type: 'pie'
+          }];
+
+          // レイアウト設定
+          const layout = {
+            title: `最大何倍株 >= ${condition} の ${column} 分布`,
+          };
+
+          // グラフ描画
+          Plotly.newPlot('chart', chartData, layout);
+        }
+      });
+    }
+
+    // 初期表示
+    renderChart(currentCondition, currentColumn);
+
+    // 最大何倍株条件タブのクリックイベント
+    document.querySelectorAll('#condition-tabs .tab').forEach(tab => {
       tab.addEventListener('click', function () {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        // タブのアクティブ状態を変更
+        document.querySelectorAll('#condition-tabs .tab').forEach(t => t.classList.remove('active'));
         this.classList.add('active');
-        const multiple = parseInt(this.getAttribute('data-multiple'));
-        renderChart(multiple);
+
+        // 条件を変更してグラフを再描画
+        currentCondition = this.getAttribute('data-condition');
+        renderChart(currentCondition, currentColumn);
       });
     });
 
-    // チャート描画
-    function renderChart(multiple) {
-      // 条件に基づきデータをフィルタリング
-      const filteredData = rawData.filter(row => {
-        const maxMultiple = parseFloat(row['最大何倍株']);
-        return multiple === 10 ? maxMultiple >= 10 : maxMultiple === multiple;
+    // データ列タブのクリックイベント
+    document.querySelectorAll('#column-tabs .tab').forEach(tab => {
+      tab.addEventListener('click', function () {
+        // タブのアクティブ状態を変更
+        document.querySelectorAll('#column-tabs .tab').forEach(t => t.classList.remove('active'));
+        this.classList.add('active');
+
+        // 列を変更してグラフを再描画
+        currentColumn = this.getAttribute('data-column');
+        renderChart(currentCondition, currentColumn);
       });
-
-      // 各指標の分布計算
-      const ownerDist = calculateDistribution(filteredData, 'オーナー株%', 10, 0, 100);
-      const growthDist = calculateDistribution(filteredData, '売上成長率_平均', 10, 0, 100);
-      const profitDist = calculateDistribution(filteredData, '経常利益率_平均', 10, 0, 100);
-      const marketCapDist = calculateDistribution(filteredData, '想定時価総額', 50, 0, 1000, true);
-      const turnoverDist = calculateDistribution(filteredData, '売買回転率', 10, 0, 100);
-
-      // グラフ描画
-      const data = [{
-        labels: ['オーナー株%', '売上成長率', '経常利益率', '想定時価総額', '売買回転率'],
-        values: [ownerDist.length, growthDist.length, profitDist.length, marketCapDist.length, turnoverDist.length],
-        type: 'pie'
-      }];
-
-      const layout = {
-        title: `${multiple}倍株における各指標の分布`,
-      };
-
-      Plotly.newPlot('chart', data, layout);
-    }
-
-    // 分布計算
-    function calculateDistribution(data, key, step, min, max, isMarketCap = false) {
-      const bins = [];
-      const upperLimit = isMarketCap ? max * 100000000 : max; // 市場規模を億に変換
-      for (let i = min; i < upperLimit; i += step) {
-        const count = data.filter(row => {
-          const value = parseFloat(row[key]) || 0;
-          return value >= i && value < i + step;
-        }).length;
-        bins.push(count);
-      }
-      return bins;
-    }
+    });
   </script>
 </body>
 
