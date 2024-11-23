@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>分布可視化 v1.0.0</title>
+  <title>分布可視化</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.0/papaparse.min.js"></script>
   <style>
@@ -32,14 +32,28 @@
       background: #ddd;
     }
 
-    .chart-container {
-      width: 100%;
-      max-width: 800px;
-      margin: 20px auto;
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      width: 100%; /* 画面全体を使用 */
+      margin: 20px 0; /* 上下のみ余白を設定 */
     }
 
-    #chart {
-      height: 500px;
+    .chart-container {
+      border: 1px solid #ddd;
+      padding: 10px;
+      border-radius: 5px;
+      background: #f9f9f9;
+    }
+
+    .chart-title {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .chart {
+      height: 400px;
     }
   </style>
 </head>
@@ -55,58 +69,125 @@
     <div class="tab" data-condition="10">最大何倍株 >= 10</div>
   </div>
 
-  <!-- データ列のタブ -->
-  <div class="tabs" id="column-tabs">
-    <div class="tab active" data-column="オーナー株%">オーナー株%</div>
-    <div class="tab" data-column="売上成長率_平均">売上成長率_平均</div>
-    <div class="tab" data-column="経常利益率_平均">経常利益率_平均</div>
-    <div class="tab" data-column="想定時価総額">想定時価総額</div>
-    <div class="tab" data-column="売買回転率">売買回転率</div>
-  </div>
-
-  <div class="chart-container">
-    <div id="chart"></div>
+  <div class="chart-grid" id="charts-container">
+    <!-- グラフはJavaScriptで動的に追加 -->
   </div>
 
   <script>
     let currentCondition = "3"; // 初期の最大何倍株条件
-    let currentColumn = "オーナー株%"; // 初期の列
+    
+    // 列名と英字IDのマッピング
+    const columnIdMap = {
+      "オーナー株%": "owner_share",
+      "売上成長率_平均": "sales_growth",
+      "経常利益率_平均": "profit_margin",
+      "想定時価総額": "market_cap",
+      "売買回転率": "turnover_rate"
+    };
+    
+    
 
-    // グラフ描画関数
-    function renderChart(condition, column) {
-      const filePath = `static/tsv/max_n_bagger_${condition}/${column}_distribution.tsv`;
+    function renderCharts(condition) {
+      const chartsContainer = document.getElementById("charts-container");
+      chartsContainer.innerHTML = ""; // 既存のグラフをクリア
 
-      Papa.parse(filePath, {
-        download: true,
-        header: true,
-        delimiter: "\t",
-        complete: function (results) {
-          const data = results.data;
+      Object.keys(columnIdMap).forEach(column => {
+        const columnId = columnIdMap[column]; // 英字IDを取得
+        const filePath = `static/tsv/max_n_bagger_${condition}/${column}_distribution.tsv`;
 
-          // データの整形
-          const labels = data.map(row => row[`${column}_区間`]);
-          const values = data.map(row => parseInt(row['件数'], 10));
+        Papa.parse(filePath, {
+          download: true,
+          header: true,
+          delimiter: "\t",
+          complete: function (results) {
+            const data = results.data;
 
-          // 円グラフデータ
-          const chartData = [{
-            labels: labels,
-            values: values,
-            type: 'pie'
-          }];
+            // データの整形
+            const labels = data.map(row => row[`${column}_区間`]);
+            const conditionValues = data.map(row => parseInt(row[`${condition}倍株件数`], 10));
+            const totalValues = data.map(row => parseInt(row['全体件数'], 10));
+            const ratios = conditionValues.map((value, index) => (value / totalValues[index]) * 100 );
 
-          // レイアウト設定
-          const layout = {
-            title: `最大何倍株 >= ${condition} の ${column} 分布`,
-          };
 
-          // グラフ描画
-          Plotly.newPlot('chart', chartData, layout);
-        }
+            if (labels.length === 0 || conditionValues.length === 0 || totalValues.length === 0) {
+              console.warn(`データが不足しています: ${filePath}`);
+              return;
+            }
+
+            
+            // 棒グラフデータ
+            const chartData = [
+              {
+                x: labels,
+                y: conditionValues,
+                type: 'bar',
+                name: `${condition}倍株件数`,
+                marker: { color: 'blue' }
+              },
+              {
+                x: labels,
+                y: totalValues,
+                type: 'bar',
+                name: '全体件数',
+                marker: { color: 'orange' }
+              },
+              {
+                x: labels,
+                y: ratios,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: '割合 (%)',
+                yaxis: 'y2', // 右軸を使用
+                line: { color: 'green', width: 2 }
+              }
+            ];
+
+            // レイアウト設定
+            const layout = {
+              title: `${column}の分布`,
+              barmode: 'group',
+              xaxis: {
+                title: `${column}区間`
+              },
+              yaxis: {
+                title: '件数',
+                side: 'left'
+              },
+              yaxis2: {
+                title: '割合 (%)',
+                overlaying: 'y',
+                side: 'right',
+                range: [0, 100]
+                //range: [-100, 100]
+              }
+            };
+
+            // グラフコンテナを作成
+            const chartContainer = document.createElement("div");
+            chartContainer.classList.add("chart-container");
+            chartContainer.innerHTML = `
+<div class="chart-title">${column}</div>
+<div id="chart-${columnId}" class="chart"></div>
+`;
+            chartsContainer.appendChild(chartContainer);
+
+            // グラフ描画
+            const chartId = `chart-${columnId}`;
+            Plotly.newPlot(chartId, chartData, layout);
+
+            
+            
+            
+
+          }
+        });
       });
     }
+    
+
 
     // 初期表示
-    renderChart(currentCondition, currentColumn);
+    renderCharts(currentCondition);
 
     // 最大何倍株条件タブのクリックイベント
     document.querySelectorAll('#condition-tabs .tab').forEach(tab => {
@@ -115,23 +196,9 @@
         document.querySelectorAll('#condition-tabs .tab').forEach(t => t.classList.remove('active'));
         this.classList.add('active');
 
-        // 条件を変更してグラフを再描画
+        // 条件を変更してすべてのグラフを再描画
         currentCondition = this.getAttribute('data-condition');
-        console.log(`条件変更: 最大何倍株 >= ${currentCondition}`); // デバッグ用
-        renderChart(currentCondition, currentColumn); // グラフを再描画
-      });
-    });
-
-    // データ列タブのクリックイベント
-    document.querySelectorAll('#column-tabs .tab').forEach(tab => {
-      tab.addEventListener('click', function () {
-        // タブのアクティブ状態を変更
-        document.querySelectorAll('#column-tabs .tab').forEach(t => t.classList.remove('active'));
-        this.classList.add('active');
-
-        // 列を変更してグラフを再描画
-        currentColumn = this.getAttribute('data-column');
-        renderChart(currentCondition, currentColumn);
+        renderCharts(currentCondition);
       });
     });
   </script>
