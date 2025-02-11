@@ -76,6 +76,16 @@
   <script>
     let currentCondition = "3"; // 初期の最大何倍株条件
     
+    
+    // 固定順序で列名を取得
+    const columns = [
+      "オーナー株%",
+      "売上成長率_平均",
+      "経常利益率_平均",
+      "想定時価総額",
+      "売買回転率"
+    ];
+    
     // 列名と英字IDのマッピング
     const columnIdMap = {
       "オーナー株%": "owner_share",
@@ -85,13 +95,11 @@
       "売買回転率": "turnover_rate"
     };
     
-    
-
     function renderCharts(condition) {
       const chartsContainer = document.getElementById("charts-container");
       chartsContainer.innerHTML = ""; // 既存のグラフをクリア
 
-      Object.keys(columnIdMap).forEach(column => {
+      columns.forEach(column => {
         const columnId = columnIdMap[column]; // 英字IDを取得
         const filePath = `static/tsv/max_n_bagger_${condition}/${column}_distribution.tsv`;
 
